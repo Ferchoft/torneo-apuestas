@@ -1,0 +1,12 @@
+{
+    "Barcelona": ["Lewandowski", "Gavi", "Pedri", "Fati", "Ferran Torres"],
+    "Real Madrid": ["Vinicius", "Bellingham", "Modric", "Rodrygo", "Kroos"],
+    "Liverpool": ["Salah", "Nunez", "Diaz", "Gakpo", "Jota"],
+    "Man. United": ["Rashford", "Garnacho", "Fernandes", "Hojlund", "Mount"],
+    "Bayern M.": ["Kane", "Musiala", "Sane", "Muller", "Coman"],
+    "B. Dortmund": ["Adeyemi", "Reus", "Brandt", "Malen", "Fullkrug"],
+    "Juventus": ["Vlahovic", "Chiesa", "Rabiot", "Kostic", "Milik"],
+    "AC Milan": ["Leao", "Giroud", "Pulisic", "Hernandez", "Loftus-Cheek"],
+    "PSG": ["Mbappe", "Dembele", "Ramos", "Asensio"],
+    "Marseille": ["Aubameyang", "Harit", "Ndiaye", "Clauss"]
+}

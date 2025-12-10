@@ -1,0 +1,67 @@
+[
+    {
+        "id": 1,
+        "equipo_local": "Barcelona",
+        "equipo_visitante": "Real Madrid",
+        "fecha": "2025-12-15",
+        "hora": "15:00",
+        "estado": "Finalizado",
+        "resultado_real": "2-1",
+        "ganador_real": "Barcelona",
+        "goleador_real": "Lewandowski",
+        "tiempo_gol_real": "1er",
+        "minuto_gol_real": 23
+    },
+    {
+        "id": 2,
+        "equipo_local": "Liverpool",
+        "equipo_visitante": "Man. United",
+        "fecha": "2025-12-15",
+        "hora": "17:30",
+        "estado": "Finalizado",
+        "resultado_real": "3-3",
+        "ganador_real": "Empate",
+        "goleador_real": "Salah",
+        "tiempo_gol_real": "2do",
+        "minuto_gol_real": 78
+    },
+    {
+        "id": 3,
+        "equipo_local": "Bayern M.",
+        "equipo_visitante": "B. Dortmund",
+        "fecha": "2025-12-16",
+        "hora": "12:00",
+        "estado": "Activo",
+        "resultado_real": "1-0",
+        "ganador_real": "Bayern M.",
+        "goleador_real": "Kane",
+        "tiempo_gol_real": "1er",
+        "minuto_gol_real": 40
+    },
+    {
+        "id": 4,
+        "equipo_local": "Juventus",
+        "equipo_visitante": "AC Milan",
+        "fecha": "2025-12-16",
+        "hora": "21:00",
+        "estado": "Pendiente",
+        "resultado_real": null,
+        "ganador_real": null,
+        "goleador_real": null,
+        "tiempo_gol_real": null,
+        "minuto_gol_real": null
+    },
+    {
+        "id": 5,
+        "equipo_local": "PSG",
+        "equipo_visitante": "Marseille",
+        "fecha": "2025-12-17",
+        "hora": "19:00",
+        "estado": "Pendiente",
+        "resultado_real": null,
+        "ganador_real": null,
+        "goleador_real": null,
+        "tiempo_gol_real": null,
+        "minuto_gol_real": null
+    }
+]
