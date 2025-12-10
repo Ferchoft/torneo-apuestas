@@ -1,0 +1,12 @@
+{
+    "Barcelona": ["R. Lewandowski", "Lamine Yamal", "Ferran Torres", "Joao Félix", "Gavi", "Pedri", "F. de Jong", "Ronald Araújo", "Otro"],
+    "Real Madrid": ["Vinicius Jr.", "Jude Bellingham", "Rodrygo", "Joselu", "Luka Modric", "Eduardo Camavinga", "Fede Valverde", "D. Carvajal", "Otro"],
+    "Liverpool": ["Mohamed Salah", "Darwin Núñez", "Luis Díaz", "Diogo Jota", "C. Gakpo", "Alexis Mac Allister", "Trent Alexander-Arnold", "Virgil van Dijk", "Otro"],
+    "Man. United": ["Marcus Rashford", "Bruno Fernandes", "Rasmus Højlund", "Antony", "Alejandro Garnacho", "Casemiro", "S. Amrabat", "Raphaël Varane", "Otro"],
+    "Bayern M.": ["Harry Kane", "Jamal Musiala", "L. Sané", "T. Müller", "K. Coman", "Joshua Kimmich", "Alphonso Davies", "M. de Ligt", "Otro"],
+    "B. Dortmund": ["K. Adeyemi", "D. Malen", "N. Füllkrug", "Julian Brandt", "Marco Reus", "Emre Can", "Mats Hummels", "Nico Schlotterbeck", "Otro"],
+    "Juventus": ["Dusan Vlahovic", "Federico Chiesa", "Kenan Yildiz", "A. Rabiot", "Manuel Locatelli", "Gleison Bremer", "Danilo", "W. McKennie", "Otro"],
+    "AC Milan": ["Rafael Leao", "Olivier Giroud", "C. Pulisic", "Tijjani Reijnders", "T. Hernández", "Fikayo Tomori", "Mike Maignan", "Yunus Musah", "Otro"],
+    "PSG": ["Kylian Mbappé", "Ousmane Dembélé", "R. Kolo Muani", "Vitinha", "M. Ugarte", "Marquinhos", "Lucas Hernández", "Gianluigi Donnarumma", "Otro"],
+    "Marseille": ["P. Aubameyang", "A. Harit", "Ismaïla Sarr", "J. Clauss", "V. Rongier", "G. Kondogbia", "Pau López", "C. Mbemba", "Otro"]
+}

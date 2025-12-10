@@ -1,0 +1,10 @@
+[
+    {"id": "usr-admin-01", "name": "Administrador", "balance": 1000, "puntos": 0, "porcentaje": 0, "isPaidPrediction": true},
+    {"id": "usr-rand-02", "name": "Jugador Top 2", "balance": 250, "puntos": 0, "porcentaje": 0, "isPaidPrediction": true},
+    {"id": "usr-rand-03", "name": "Jugador Regular", "balance": 100, "puntos": 0, "porcentaje": 0, "isPaidPrediction": true},
+    {"id": "usr-rand-04", "name": "Competidor 4", "balance": 150, "puntos": 0, "porcentaje": 0, "isPaidPrediction": true},
+    {"id": "usr-rand-05", "name": "Competidor 5", "balance": 120, "puntos": 0, "porcentaje": 0, "isPaidPrediction": true},
+    {"id": "usr-rand-06", "name": "Competidor 6", "balance": 80, "puntos": 0, "porcentaje": 0, "isPaidPrediction": true},
+    {"id": "usr-rand-07", "name": "Competidor 7", "balance": 180, "puntos": 0, "porcentaje": 0, "isPaidPrediction": true},
+    {"id": "usr-rand-08", "name": "Competidor Sin Pagar", "balance": 50, "puntos": 0, "porcentaje": 0, "isPaidPrediction": false}
+]

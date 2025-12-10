@@ -1,0 +1,549 @@
+/* Paleta de colores inspirada en dashboard deportivo y apuestas */
+:root {
+    --color-primary: #0f1c34; /* Azul muy oscuro/casi negro */
+    --color-secondary: #00ff7f; /* Verde neón/lima */
+    --color-accent: #ff4141; /* Rojo de alerta */
+    --color-dark: #091321; /* Fondo principal */
+    --color-light: #f4f4f4;
+    --color-card: #152741; /* Tarjetas y contenedores */
+    --color-button-hover: #00c766;
+}
+
+/* Estilos Generales y Tipografía */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--color-dark);
+    color: var(--color-light);
+    margin: 0;
+    padding: 0;
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 20px auto;
+    padding: 0 15px;
+}
+
+h1, h2, h3 {
+    color: var(--color-secondary);
+    text-align: center;
+    margin-bottom: 20px;
+    font-weight: 700;
+}
+
+/* Header/Navigation */
+.header-nav {
+    background-color: var(--color-primary);
+    padding: 15px 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.header-nav h1 {
+    margin: 0;
+    font-size: 1.8em;
+}
+
+.nav-links {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}
+
+.welcome-msg {
+    color: var(--color-light);
+    font-size: 0.9em;
+}
+
+.balance {
+    background-color: var(--color-card);
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-weight: bold;
+    color: var(--color-secondary);
+}
+
+/* Botones */
+.btn-primary, .btn-secondary {
+    padding: 10px 15px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.3s;
+    font-size: 1em;
+}
+
+.btn-primary {
+    background-color: var(--color-secondary);
+    color: var(--color-primary);
+}
+
+.btn-primary:hover {
+    background-color: var(--color-button-hover);
+}
+
+.btn-secondary {
+    background-color: var(--color-card);
+    color: var(--color-light);
+    border: 1px solid var(--color-secondary);
+}
+
+.btn-secondary:hover {
+    background-color: var(--color-primary);
+}
+
+.btn-primary:disabled, .btn-secondary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+
+/* Formularios y Tarjetas (Cards) */
+.card {
+    background-color: var(--color-card);
+    padding: 25px;
+    margin-bottom: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    color: var(--color-secondary);
+    font-weight: bold;
+}
+
+input[type="text"], input[type="number"], select {
+    width: 100%;
+    padding: 10px;
+    margin-top: 5px;
+    border: 1px solid var(--color-primary);
+    border-radius: 5px;
+    background-color: var(--color-dark);
+    color: var(--color-light);
+    box-sizing: border-box; 
+}
+
+input[type="number"]::-webkit-inner-spin-button {
+    opacity: 1; 
+}
+
+/* Dashboard Grid */
+.action-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.action-card {
+    text-align: center;
+    padding: 30px;
+    border: 1px solid var(--color-secondary);
+    border-radius: 8px;
+}
+
+.action-card i {
+    font-size: 3em;
+    color: var(--color-secondary);
+    margin-bottom: 15px;
+}
+
+/* Predicciones */
+.match-prediction {
+    border-left: 5px solid var(--color-accent);
+}
+
+.flex-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+    margin-top: 15px;
+}
+
+.score-row {
+    justify-content: center !important;
+}
+
+.team-score-input {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 5px;
+}
+
+.team-score-input input {
+    width: 70px;
+    text-align: center;
+}
+.team-score-input label {
+    min-width: 80px;
+    text-align: right;
+    font-weight: bold;
+}
+
+.team-score-input span {
+    font-size: 1.5em;
+    font-weight: bold;
+    color: var(--color-secondary);
+}
+
+/* Estilos Específicos para Predicciones Dinámicas por Gol */
+
+.dynamic-prediction-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-top: 25px;
+}
+
+.team-block {
+    flex: 1;
+    min-width: 0; 
+}
+
+.team-block h4 {
+    margin: 0 0 10px 0;
+    font-size: 1.1em;
+    color: var(--color-accent);
+    text-align: left;
+    border-bottom: 2px solid var(--color-accent);
+    padding-bottom: 5px;
+}
+
+/* Nuevo estilo para la cuadrícula de inputs de goles */
+.goal-input-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px;
+    background-color: var(--color-dark); /* Fondo oscuro para agrupar */
+    border-radius: 5px;
+    margin-top: 10px;
+    min-height: 50px; /* Para mantener espacio si está vacío */
+}
+
+.goal-input-group {
+    display: flex;
+    align-items: flex-start; /* Cambio a flex-start */
+    gap: 5px; 
+    padding: 5px;
+    border-bottom: 1px dashed #283e5a;
+    background-color: var(--color-primary);
+    border-radius: 4px;
+}
+
+.goal-input-group:last-child {
+    border-bottom: none;
+}
+
+.goal-input-group label {
+    font-weight: normal;
+    font-size: 0.8em; 
+    color: var(--color-light);
+    min-width: 40px; 
+    align-self: center; /* Centrar verticalmente la etiqueta */
+}
+.goal-input-group label:first-child {
+    min-width: 80px;
+}
+
+/* Contenedor para el SELECT del goleador + Input personalizado (Otro) */
+.scorer-input-wrapper {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 2; /* Dar más espacio al goleador */
+    max-width: 40%;
+    min-width: 100px;
+}
+
+.goal-input-group select, .goal-input-group input[type="number"], .scorer-select, .custom-scorer-input {
+    padding: 8px;
+    font-size: 0.9em;
+    max-width: 100%;
+    margin-top: 0; /* Anular el margin-top general */
+}
+
+.goal-input-group select {
+    flex-grow: 1;
+    max-width: 70px;
+}
+.scorer-select {
+    margin-bottom: 5px;
+}
+.custom-scorer-input {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.goal-input-group input[type="number"] {
+    flex-grow: 1;
+    max-width: 60px;
+    text-align: center;
+}
+/* Fin Estilos Específicos Predicciones Dinámicas */
+
+
+/* Ranking Table */
+.table-ranking {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+.table-ranking th, .table-ranking td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid var(--color-primary);
+}
+
+.table-ranking th {
+    background-color: var(--color-primary);
+    color: var(--color-secondary);
+    font-weight: bold;
+    text-transform: uppercase;
+    font-size: 0.9em;
+}
+
+.table-ranking tr {
+    background-color: var(--color-card);
+    transition: background-color 0.3s;
+}
+
+.table-ranking tr:hover {
+    background-color: #1a3050;
+}
+
+.table-ranking .current-user {
+    background-color: #351a44; 
+    border-left: 5px solid var(--color-accent);
+}
+
+.table-ranking .current-user td {
+    font-weight: bold;
+}
+
+/* Footer */
+.footer-copy {
+    text-align: center;
+    padding: 15px;
+    margin-top: 30px;
+    font-size: 0.8em;
+    color: #888;
+    border-top: 1px solid var(--color-primary);
+}
+
+
+/* Carrusel/Home */
+.carousel-container {
+    position: relative;
+    margin-bottom: 30px;
+}
+
+.carousel {
+    display: flex;
+    overflow-x: scroll;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    gap: 15px;
+    padding: 10px 0;
+    scrollbar-width: none; 
+}
+
+.carousel::-webkit-scrollbar {
+    display: none; 
+}
+
+.carousel-item {
+    flex: 0 0 300px; 
+    scroll-snap-align: start;
+    background-color: var(--color-card);
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+}
+
+.carousel-item h4 {
+    color: var(--color-accent);
+    margin-top: 0;
+    text-align: left;
+}
+.carousel-item p {
+    margin: 5px 0;
+}
+.bet-info span {
+    color: var(--color-secondary);
+    font-weight: bold;
+    font-size: 1.1em;
+}
+
+.carousel-nav-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    border: none;
+    padding: 10px;
+    cursor: pointer;
+    z-index: 10;
+    border-radius: 50%;
+    opacity: 0.7;
+    transition: opacity 0.3s;
+}
+
+.carousel-nav-btn:hover {
+    opacity: 1;
+}
+
+.carousel-nav-btn.left {
+    left: 0px;
+}
+
+.carousel-nav-btn.right {
+    right: 0px;
+}
+
+
+/* Media Queries para Responsividad */
+@media (max-width: 900px) {
+    .header-nav {
+        flex-direction: column;
+        gap: 10px;
+        padding: 15px;
+    }
+    .header-nav h1 {
+        margin-bottom: 10px;
+    }
+    .nav-links {
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    .container {
+        margin: 10px auto;
+    }
+    
+    .dynamic-prediction-row {
+        grid-template-columns: 1fr;
+    }
+    .team-block {
+        width: 100%;
+    }
+    .goal-input-grid {
+        padding: 5px;
+    }
+    .goal-input-group {
+        flex-wrap: wrap;
+        /* Revertir al diseño en grid para móviles */
+        display: grid; 
+        grid-template-columns: 80px 1fr 50px 1fr 50px 1fr;
+        gap: 5px;
+    }
+    
+    .goal-input-group label:first-child {
+        grid-column: 1 / 2;
+        align-self: center;
+    }
+    .scorer-input-wrapper {
+        grid-column: 2 / 7;
+        max-width: 100%;
+        min-width: 0;
+        margin-bottom: 5px;
+    }
+
+    .goal-input-group label[for*="goalTime"] {
+        grid-column: 1 / 2;
+        min-width: 30px;
+    }
+    .goal-input-group select.time-input {
+        grid-column: 2 / 4;
+        max-width: 100% !important;
+    }
+    .goal-input-group label[for*="goalMinute"] {
+        grid-column: 4 / 5;
+        min-width: 30px;
+    }
+    .goal-input-group input[type="number"] {
+        grid-column: 5 / 7;
+        max-width: 100% !important;
+    }
+}
+
+
+@media (max-width: 600px) {
+    /* Ocultar botones de navegación en carrusel en móviles */
+    .carousel-nav-btn {
+        display: none;
+    }
+
+    /* Tablas Responsivas para Ranking (Modo Tarjeta) */
+    .table-ranking, .table-ranking thead, .table-ranking tbody, .table-ranking th, .table-ranking td, .table-ranking tr {
+        display: block;
+    }
+
+    .table-ranking thead tr {
+        position: absolute;
+        top: -9999px;
+        left: -9999px;
+    }
+
+    .table-ranking tr {
+        border: 1px solid var(--color-primary);
+        margin-bottom: 15px;
+        border-radius: 8px;
+    }
+
+    .table-ranking td {
+        border: none;
+        border-bottom: 1px solid #283e5a;
+        position: relative;
+        padding-left: 50%;
+        text-align: right;
+    }
+
+    .table-ranking td:before {
+        content: attr(data-label);
+        position: absolute;
+        left: 6px;
+        width: 45%;
+        padding-right: 10px;
+        white-space: nowrap;
+        text-align: left;
+        font-weight: bold;
+        color: var(--color-secondary);
+    }
+    
+    .table-ranking td:last-child {
+        border-bottom: none;
+    }
+    
+    .team-score-input {
+        justify-content: space-between;
+        gap: 5px;
+    }
+    .team-score-input input {
+        width: 50px;
+    }
+    .team-score-input label {
+        min-width: 50px;
+        text-align: left;
+    }
+
+    /* Asegurar que los inputs de gol se vean bien en móviles */
+    .goal-input-group {
+        grid-template-columns: 80px 1fr 50px 1fr 50px 1fr;
+    }
+    .scorer-input-wrapper {
+        grid-column: 2 / 7;
+    }
+}
