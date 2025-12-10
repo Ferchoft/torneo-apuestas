@@ -2,10 +2,9 @@
  * =================================================================
  * ARCHIVO: app.js
  * Lógica Central del Prototipo (Completo, Funcional y Responsivo)
- * INCLUYE: Interfaz de Jugadores y Panel de Administración
  * =================================================================
- * NOTA: Este código asume que los archivos de datos matches.json, 
- * dummy-players.json y team-players.json están ubicados localmente.
+ * NOTA: Este código incluye todas las funcionalidades y las correcciones
+ * necesarias para el cálculo de puntos y la navegación en GitHub Pages.
  * =================================================================
  */
 
@@ -18,7 +17,7 @@ const APP_ROUTES = {
     ROOM: 'room',
     PREDICTIONS: 'predictions',
     RANKING: 'ranking',
-    ADMIN: 'admin' // <--- RUTA DE ADMINISTRACIÓN
+    ADMIN: 'admin' // Nueva ruta para la administración
 };
 
 const POINTS_SYSTEM = {
@@ -32,47 +31,43 @@ const POINTS_SYSTEM = {
 const ENTRY_FEE = 5; // USD
 const ROOM_LIMIT = 1000;
 let currentInterval; // Intervalo para la simulación
-let globalMatches = []; // Variable global para almacenar los partidos
 
 // --- 2. GESTIÓN DE DATOS Y ESTADO ---
 
-/**
- * Función que simula la carga de datos de archivos JSON.
- * Prioriza datos guardados localmente (simulaciones de administración).
- */
 async function fetchData(file) {
-    let data;
-
-    if (file === 'matches.json') {
-        // Cargar datos de partidos con prioridad al simulado por la administración
-        const simulatedMatches = localStorage.getItem('simulatedMatches');
-        if (simulatedMatches) {
-            data = JSON.parse(simulatedMatches);
-        } else {
-            const response = await fetch(file);
-            data = await response.json();
-            globalMatches = data; // Almacenar en global para referencia
-        }
-    } else if (file === 'dummy-players.json') {
-        // Cargar datos de jugadores con prioridad al simulado por la administración
-        const simulatedPlayers = localStorage.getItem('simulatedPlayers');
-        if (simulatedPlayers) {
-            data = JSON.parse(simulatedPlayers);
-        } else {
-            const response = await fetch(file);
-            data = await response.json();
-        }
-    } else {
+    try {
         const response = await fetch(file);
-        data = await response.json();
+        if (!response.ok) {
+            throw new Error(`Error al cargar ${file}: ${response.statusText}`);
+        }
+        return response.json();
+    } catch (error) {
+        console.error(`Fallo al obtener datos de ${file}:`, error);
+        // Mostrar un mensaje claro en la interfaz si la carga falla
+        document.getElementById('app-content').innerHTML = `
+            <div class="card error-message">
+                <h2>🚨 Error de Carga 🚨</h2>
+                <p>No se pudo cargar el archivo **${file}**. Asegúrate de que el archivo existe y que estás ejecutando la aplicación en un servidor web (o GitHub Pages).</p>
+            </div>
+        `;
+        return [];
     }
-    
-    // Si se cargaron datos de partidos por primera vez, inicializar globalMatches
-    if (file === 'matches.json' && globalMatches.length === 0) {
-        globalMatches = data;
-    }
-    
-    return data;
+}
+
+// Almacenamiento local para usuario y predicciones
+function savePredictions(predictions) {
+    localStorage.setItem('poolPredictions', JSON.stringify(predictions));
+}
+
+function getPredictions() {
+    const predictions = localStorage.getItem('poolPredictions');
+    return predictions ? JSON.parse(predictions) : {};
+}
+
+function setCurrentUser(user) {
+    // Para simplificar, si no hay 'balance' lo inicializamos
+    if (!user.balance) user.balance = 100.00; 
+    localStorage.setItem('currentUser', JSON.stringify(user));
 }
 
 function getCurrentUser() {
@@ -80,163 +75,635 @@ function getCurrentUser() {
     return user ? JSON.parse(user) : null;
 }
 
-function setCurrentUser(user) {
-    localStorage.setItem('currentUser', JSON.stringify(user));
+function logout() {
+    localStorage.removeItem('currentUser');
+    navigate(APP_ROUTES.HOME);
 }
 
-function getPredictions() {
-    const predictions = localStorage.getItem('predictions');
-    return predictions ? JSON.parse(predictions) : {};
-}
 
-function savePredictions(predictions) {
-    localStorage.setItem('predictions', JSON.stringify(predictions));
-}
+// --- 3. LÓGICA DE CÁLCULO DE PUNTOS (CON CORRECCIÓN DE ERRORES) ---
 
-// --- 3. LÓGICA DEL JUEGO (PUNTUACIÓN) ---
-
-function determineWinner(localScore, visitorScore, team1Name, team2Name) {
-    if (localScore > visitorScore) return team1Name;
-    if (visitorScore > localScore) return team2Name;
+function determineWinner(localScore, visitorScore, localTeam, visitorTeam) {
+    if (localScore > visitorScore) return localTeam;
+    if (visitorScore > localScore) return visitorTeam;
     return 'Empate';
 }
 
 function calculatePoints(prediction, match) {
+    // Si el partido no ha terminado o no hay predicción, no se dan puntos.
+    if (match.estado !== 'Finalizado' || !prediction) return { points: 0, totalPossiblePoints: 0 }; 
+
     let points = 0;
-    
-    if (match.estado !== 'Finalizado' || !match.resultado_real) {
-        return 0; // Solo se calcula la puntuación si el partido ha finalizado
+    const totalPossiblePoints = Object.values(POINTS_SYSTEM).reduce((a, b) => a + b, 0);
+
+    // 1. Acierto en el Ganador/Empate (10 pts)
+    const userWinner = determineWinner(
+        parseInt(prediction.localScore),
+        parseInt(prediction.visitorScore),
+        match.equipo_local,
+        match.equipo_visitante
+    );
+    // [CORRECCIÓN] Asegurar que match.ganador_real existe
+    if (match.ganador_real && userWinner === match.ganador_real) {
+        points += POINTS_SYSTEM.WINNER;
     }
 
-    const [realLocalScore, realVisitorScore] = match.resultado_real.split('-').map(Number);
-
-    // 1. Acierto en el Marcador Exacto
-    if (prediction.localScore === realLocalScore && prediction.visitorScore === realVisitorScore) {
+    // 2. Acierto en el Marcador Exacto (20 pts)
+    const userScore = `${prediction.localScore}-${prediction.visitorScore}`;
+    // [CORRECCIÓN] Asegurar que match.resultado_real existe
+    if (match.resultado_real && userScore === match.resultado_real) {
         points += POINTS_SYSTEM.EXACT_SCORE;
-    } else {
-        // 2. Acierto en el Ganador o Empate
-        const predictedWinner = determineWinner(prediction.localScore, prediction.visitorScore, match.equipo_local, match.equipo_visitante);
-        if (predictedWinner === match.ganador_real) {
-            points += POINTS_SYSTEM.WINNER;
-        }
     }
 
-    // 3. Acierto en el Goleador (simulado)
-    if (prediction.scorer.toLowerCase() === match.goleador_real.toLowerCase()) {
+    // 3. Acierto en Goleador (15 pts) - CORRECCIÓN CLAVE PARA toLowerCase
+    const predictedScorer = (prediction.scorer || "").toLowerCase().trim();
+    // [CORRECCIÓN] Asegurar que match.goleador_real existe y convertir a minúsculas
+    const realScorer = (match.goleador_real || "").toLowerCase().trim();
+
+    if (predictedScorer && realScorer && predictedScorer === realScorer) {
         points += POINTS_SYSTEM.GOALSCORER;
     }
 
-    // 4. Acierto en el Tiempo del Gol
-    if (prediction.goalTime === match.tiempo_gol_real) {
+    // 4. Acierto en el Tiempo del Primer Gol (10 pts)
+    // [CORRECCIÓN] Asegurar que match.tiempo_gol_real existe
+    if (match.tiempo_gol_real && prediction.goalTime === match.tiempo_gol_real) {
         points += POINTS_SYSTEM.GOAL_TIME;
     }
 
-    // 5. Acierto en el Minuto del Gol (+/- 5 minutos)
-    if (Math.abs(prediction.goalMinute - match.minuto_gol_real) <= 5) {
-        points += POINTS_SYSTEM.GOAL_MINUTE;
+    // 5. Acierto en el Minuto Aproximado (5 pts)
+    // [CORRECCIÓN] Asegurar que match.minuto_gol_real existe
+    if (match.minuto_gol_real) {
+        const minuteDiff = Math.abs(parseInt(prediction.goalMinute) - match.minuto_gol_real);
+        if (minuteDiff <= 5) {
+            points += POINTS_SYSTEM.GOAL_MINUTE;
+        }
     }
 
-    return points;
+    return { points, totalPossiblePoints };
 }
 
-/**
- * Recalcula y actualiza los puntos totales y el porcentaje de acierto de todos los jugadores.
- */
 async function recalculateRanking(allPlayers, allPredictions, matches) {
-    if (!allPlayers || !matches) return;
-
-    let totalPossiblePoints = 0;
-
-    // Calcular puntos posibles solo para partidos finalizados
-    matches.forEach(match => {
-        if (match.estado === 'Finalizado') {
-            totalPossiblePoints += (POINTS_SYSTEM.EXACT_SCORE + POINTS_SYSTEM.GOALSCORER + POINTS_SYSTEM.GOAL_TIME + POINTS_SYSTEM.GOAL_MINUTE);
-        }
-    });
-
-    const updatedPlayers = allPlayers.map(player => {
+    const playersWithPoints = allPlayers.map(player => {
         let totalPoints = 0;
-        let totalPlayerPossiblePoints = 0;
-        
-        matches.forEach(match => {
-            const predKey = `${player.id}-${match.id}`;
-            const prediction = allPredictions[predKey];
+        let correctPredictions = 0;
+        let totalPredictions = 0;
 
-            if (match.estado === 'Finalizado' && prediction) {
-                const matchPoints = calculatePoints(prediction, match);
-                totalPoints += matchPoints;
-                // Si hizo la predicción en un partido finalizado, suma la máxima puntuación posible para el denominador
-                totalPlayerPossiblePoints += (POINTS_SYSTEM.EXACT_SCORE + POINTS_SYSTEM.GOALSCORER + POINTS_SYSTEM.GOAL_TIME + POINTS_SYSTEM.GOAL_MINUTE);
+        matches.forEach(match => {
+            const prediction = allPredictions[`${player.id}-${match.id}`];
+            if (prediction) {
+                totalPredictions++;
+                const result = calculatePoints(prediction, match);
+                totalPoints += result.points;
+                // Contar una predicción como correcta si obtuvo puntos (ej. acertó al menos el ganador)
+                if (result.points > 0) { 
+                    correctPredictions++;
+                }
             }
         });
 
-        // El porcentaje de acierto es (Puntos obtenidos / Puntos Máximos Posibles donde el jugador predijo)
-        const percentage = totalPlayerPossiblePoints > 0 ? Math.round((totalPoints / totalPlayerPossiblePoints) * 100) : 0;
-
-        return {
-            ...player,
-            puntos: totalPoints,
-            porcentaje: percentage
-        };
+        // Asegura que los puntos se actualicen, incluso si el jugador ya tenía puntos de muestra
+        player.puntos = totalPoints;
+        player.totalPredictions = totalPredictions;
+        player.correctPredictions = correctPredictions;
+        player.porcentaje = totalPredictions > 0 ? Math.round((correctPredictions / totalPredictions) * 100) : 0;
+        
+        return player;
     });
 
-    // Guardar el ranking actualizado (simulación de persistencia)
-    localStorage.setItem('simulatedPlayers', JSON.stringify(updatedPlayers));
+    // Filtra y ordena solo los que pagaron (asumiendo que los jugadores demo ya tienen isPaidPrediction: true), luego asigna la posición
+    const finalRanking = playersWithPoints
+        .filter(p => p.isPaidPrediction)
+        .sort((a, b) => b.puntos - a.puntos || b.porcentaje - a.porcentaje);
 
-    // Si el usuario actual es uno de ellos, actualizarlo también
-    const currentUser = getCurrentUser();
-    if (currentUser) {
-        const updatedUser = updatedPlayers.find(p => p.id === currentUser.id);
-        if (updatedUser) {
-            // Solo actualizar los campos de puntos y porcentaje del objeto currentUser
-            setCurrentUser({...currentUser, puntos: updatedUser.puntos, porcentaje: updatedUser.porcentaje});
+    finalRanking.forEach((p, index) => p.posicion = index + 1);
+
+    return finalRanking;
+}
+
+// --- 4. RENDERIZADO DE INTERFACES (VISTAS) ---
+
+// Maneja la simulación de partidos "Activos"
+function startMatchSimulation(match) {
+    clearInterval(currentInterval); // Detener cualquier simulación anterior
+    let minute = match.minuto_gol_real || 0;
+    const score = match.resultado_real.split('-');
+    let localScore = parseInt(score[0]);
+    let visitorScore = parseInt(score[1]);
+
+    const dashboardContent = document.getElementById('dashboard-match-content');
+    if (!dashboardContent) return;
+
+    function updateMatch() {
+        minute++;
+
+        if (minute > 90) {
+            clearInterval(currentInterval);
+            dashboardContent.innerHTML = `<p class="match-status finished"><i class="fas fa-flag-checkered"></i> Partido Finalizado (Simulado)</p>`;
+            return;
         }
+
+        let time = '1er T.';
+        if (minute > 45) time = '2do T.';
+        if (minute > 90) time = 'FT'; // Full Time
+
+        dashboardContent.innerHTML = `
+            <div class="match-live">
+                <div class="match-status active"><i class="fas fa-futbol"></i> Activo: ${time} (Min. ${minute})</div>
+                <div class="score-board">
+                    <span>${match.equipo_local}</span>
+                    <span class="score-display">${localScore} - ${visitorScore}</span>
+                    <span>${match.equipo_visitante}</span>
+                </div>
+                <p class="scorer-info"><i class="fas fa-bolt"></i> Último gol: ${match.goleador_real} (${match.tiempo_gol_real} T. Min ${match.minuto_gol_real})</p>
+                <p style="font-size: 0.9em; opacity: 0.7;">*Simulación basada en los datos reales del partido.</p>
+            </div>
+        `;
     }
 
-    return updatedPlayers.sort((a, b) => b.puntos - a.puntos);
+    updateMatch();
+    currentInterval = setInterval(updateMatch, 1000); // Actualiza cada 1 segundo (simula 1 minuto)
 }
 
 
-// --- 4. GESTIÓN DE NAVEGACIÓN Y RENDERIZADO ---
+function renderRankingTable(ranking) {
+    if (!ranking || ranking.length === 0) return `<p style="text-align: center;">No hay suficientes participantes pagados para mostrar el ranking.</p>`;
 
-function updateHeader(user) {
-    const header = document.getElementById('app-header');
-    if (!user) {
-        header.innerHTML = `<h1>⚽ Football Pool MAX</h1>`;
-        return;
-    }
+    const winner = ranking.length > 0 ? ranking[0] : null;
+    const winnerMessage = winner ? `¡El líder actual es ${winner.name} con ${winner.puntos} puntos!` : 'Esperando resultados...';
 
-    header.innerHTML = `
-        <div class="user-info">
-            <span class="user-name"><i class="fas fa-user-circle"></i> ${user.name}</span>
-            <span class="user-balance"><i class="fas fa-wallet"></i> Saldo: $${user.balance.toFixed(2)} USD</span>
+    const user = getCurrentUser() || {};
+
+    const tableRows = ranking.map(player => {
+        return `
+            <tr class="${player.id === user.id ? 'current-user' : ''}">
+                <td data-label="Posición"><i class="fas fa-trophy"></i> ${player.posicion}</td>
+                <td data-label="Jugador">${player.name}</td>
+                <td data-label="Puntos">${player.puntos}</td>
+                <td data-label="% Aciertos">${player.porcentaje}%</td>
+            </tr>
+        `;
+    }).join('');
+
+    return `
+        <div class="card" style="margin-bottom: 20px; border-left: 5px solid var(--color-secondary); text-align: center;">
+            <h3>🏆 Resultados de la Ronda 🏆</h3>
+            <p style="font-size: 1.1em; font-weight: bold;">${winnerMessage}</p>
         </div>
-        <nav class="main-nav">
-            <a href="#dashboard" onclick="navigate('${APP_ROUTES.DASHBOARD}')"><i class="fas fa-home"></i> Inicio</a>
-            <a href="#predictions" onclick="navigate('${APP_ROUTES.PREDICTIONS}')"><i class="fas fa-edit"></i> Predicciones</a>
-            <a href="#ranking" onclick="navigate('${APP_ROUTES.RANKING}')"><i class="fas fa-trophy"></i> Ranking</a>
-            <a href="#room" onclick="navigate('${APP_ROUTES.ROOM}')"><i class="fas fa-users"></i> Sala</a>
-        </nav>
-        <button class="btn-logout" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Salir</button>
+        <table class="table-ranking">
+            <thead>
+                <tr>
+                    <th>Posición</th>
+                    <th>Jugador</th>
+                    <th>Puntos</th>
+                    <th>% Aciertos</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${tableRows}
+            </tbody>
+        </table>
     `;
 }
 
-function navigate(route, data = {}) {
-    const content = document.getElementById('app-content');
+async function startRankingSimulation(allPlayers, matches) {
+    const rankingContainer = document.getElementById('room-ranking-container') || document.getElementById('full-ranking-container');
+    if (!rankingContainer) return;
+
+    let playersForSim = JSON.parse(JSON.stringify(allPlayers)); 
+    let allPredictions = getPredictions();
+    
+    const update = async () => {
+        // Simulación de movimiento de puntos solo para jugadores de muestra que han pagado
+        const dummyPlayers = playersForSim.filter(p => !p.id.startsWith('usr-demo') && p.isPaidPrediction);
+        if (dummyPlayers.length > 0) {
+            const randomIndex = Math.floor(Math.random() * dummyPlayers.length);
+            const dummyPlayer = dummyPlayers[randomIndex];
+            if (Math.random() < 0.2) { 
+                // Simula pequeños cambios en los puntos para dar la sensación de "tiempo real"
+                dummyPlayer.puntos = (dummyPlayer.puntos || 0) + (Math.random() > 0.5 ? 2 : -2);
+                dummyPlayer.puntos = Math.max(0, dummyPlayer.puntos);
+            }
+        }
+
+        const newRanking = await recalculateRanking(playersForSim, allPredictions, matches);
+        
+        rankingContainer.innerHTML = `
+            <h3>Ranking en Tiempo Real (Solo Participantes Pagados) <i class="fas fa-sync-alt fa-spin"></i></h3>
+            ${renderRankingTable(newRanking)}
+        `;
+    };
+
+    update();
+    currentInterval = setInterval(update, 5000); 
+}
+
+
+// VISTA HOME/LANDING PAGE
+async function renderHome(content) {
     const user = getCurrentUser();
+    if (user) return navigate(APP_ROUTES.DASHBOARD); 
+    
+    content.innerHTML = `
+        <div class="card welcome-card">
+            <h1>Bienvenido a Football Pool MAX</h1>
+            <p class="slogan">Predice, Compite y Gana. La rifa deportiva definitiva.</p>
+            <div class="feature-list">
+                <div class="feature-item"><i class="fas fa-trophy"></i> Predicción de Marcadores</div>
+                <div class="feature-item"><i class="fas fa-users"></i> Ranking en Tiempo Real</div>
+                <div class="feature-item"><i class="fas fa-money-bill-wave"></i> Bote Acumulado</div>
+            </div>
+            <a href="#login" class="btn btn-primary btn-large"><i class="fas fa-sign-in-alt"></i> Iniciar Sesión</a>
+            <a href="#room" class="btn btn-secondary btn-large"><i class="fas fa-users"></i> Ver Sala de Apuestas</a>
+        </div>
+    `;
+}
 
-    clearInterval(currentInterval); // Limpiar cualquier intervalo activo
+// VISTA LOGIN
+async function renderLogin(content) {
+    const allPlayers = await fetchData('dummy-players.json');
+    
+    // Añadir un jugador Admin de muestra (si no existe)
+    let players = [...allPlayers];
+    const adminExists = players.find(p => p.id === 'admin-001');
+    if (!adminExists) {
+        // Añadir saldo de ejemplo para el admin
+        players.unshift({id: "admin-001", name: "Administrador", balance: 5000.00, puntos: 0, porcentaje: 0, isPaidPrediction: true});
+    }
 
-    // Si no está logueado y no es la página de inicio/login/admin, redirigir.
-    if (!user && route !== APP_ROUTES.HOME && route !== APP_ROUTES.LOGIN && route !== APP_ROUTES.ADMIN) {
-        window.location.hash = APP_ROUTES.HOME;
-        renderHome(content);
+    if (players.length === 0) return; 
+
+    const playerOptions = players.map(p => 
+        `<option value="${p.id}">${p.name} ${p.id.startsWith('admin') ? '(Admin)' : ''}</option>`
+    ).join('');
+
+    content.innerHTML = `
+        <div class="card form-card">
+            <h2><i class="fas fa-user-lock"></i> Iniciar Sesión (Demo)</h2>
+            <p>Selecciona un perfil de jugador para entrar en modo simulación.</p>
+            <form id="login-form">
+                <div class="input-group">
+                    <label for="player-select">Selecciona tu Perfil:</label>
+                    <select id="player-select" required>
+                        <option value="">-- Elige un jugador --</option>
+                        ${playerOptions}
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Entrar</button>
+            </form>
+        </div>
+    `;
+
+    document.getElementById('login-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const selectedId = document.getElementById('player-select').value;
+        const selectedPlayer = players.find(p => p.id === selectedId);
+        if (selectedPlayer) {
+            setCurrentUser(selectedPlayer);
+            navigate(APP_ROUTES.DASHBOARD);
+        } else {
+            alert('Por favor, selecciona un jugador válido.');
+        }
+    });
+}
+
+// VISTA DASHBOARD
+async function renderDashboard(content) {
+    const user = getCurrentUser();
+    if (!user) return navigate(APP_ROUTES.LOGIN);
+
+    const matches = await fetchData('matches.json');
+    const allPredictions = getPredictions();
+
+    const activeMatch = matches.find(m => m.estado === 'Activo');
+    const finishedMatches = matches.filter(m => m.estado === 'Finalizado');
+
+    // Recalcular puntos con datos actualizados
+    const allPlayers = await fetchData('dummy-players.json');
+    const currentRanking = await recalculateRanking([...allPlayers, user], allPredictions, finishedMatches);
+    const currentUserStats = currentRanking.find(p => p.id === user.id) || user; 
+    
+    let matchContent = `<div class="card empty-state"><h3><i class="fas fa-clock"></i> No hay partidos Activos en este momento.</h3><p>¡Revisa la lista de Predicciones!</p></div>`;
+    if (activeMatch) {
+        matchContent = `
+            <div class="card match-card active-match">
+                <h3>Partido en Vivo</h3>
+                <div id="dashboard-match-content">
+                </div>
+            </div>
+        `;
+    }
+
+    content.innerHTML = `
+        <h2><i class="fas fa-tachometer-alt"></i> Mi Dashboard</h2>
+        <div class="user-stats">
+            <div class="card stat-card"><i class="fas fa-user-circle"></i> Nombre: <span>${user.name}</span></div>
+            <div class="card stat-card"><i class="fas fa-coins"></i> Saldo: <span>$${user.balance.toFixed(2)} USD</span></div>
+            <div class="card stat-card"><i class="fas fa-medal"></i> Puntos Acumulados: <span>${currentUserStats.puntos || 0}</span></div>
+            <div class="card stat-card"><i class="fas fa-check-double"></i> % Aciertos: <span>${currentUserStats.porcentaje || 0}%</span></div>
+        </div>
+
+        <div class="dashboard-grid">
+            ${matchContent}
+            <div class="card next-match-card">
+                <h3>Próximos Partidos</h3>
+                ${matches.filter(m => m.estado === 'Pendiente').slice(0, 3).map(m => `
+                    <div class="match-list-item">
+                        <span class="teams">${m.equipo_local} vs ${m.equipo_visitante}</span>
+                        <span class="date">${m.fecha} ${m.hora}</span>
+                    </div>
+                `).join('')}
+                <a href="#predictions" class="btn btn-secondary btn-small">Ver todos los partidos</a>
+            </div>
+        </div>
+    `;
+
+    if (activeMatch) {
+        startMatchSimulation(activeMatch);
+    }
+}
+
+// VISTA PREDICIONES
+async function renderPredictions(content) {
+    const user = getCurrentUser();
+    if (!user) return navigate(APP_ROUTES.LOGIN);
+
+    clearInterval(currentInterval);
+
+    const matches = await fetchData('matches.json');
+    const allPredictions = getPredictions();
+
+    content.innerHTML = `
+        <h2><i class="fas fa-futbol"></i> Mis Predicciones</h2>
+        <p>Ingresa tus pronósticos para los partidos **Pendientes**.</p>
+        <div class="predictions-list">
+            ${matches.map(match => {
+                const prediction = allPredictions[`${user.id}-${match.id}`];
+                const isFinalizado = match.estado === 'Finalizado';
+                const isActivo = match.estado === 'Activo';
+                const isPending = match.estado === 'Pendiente';
+                const isDisabled = !isPending;
+                
+                let predictionHtml = '';
+                if (isFinalizado) {
+                    const result = calculatePoints(prediction, match);
+                    predictionHtml = `
+                        <div class="prediction-result">
+                            <p class="final-score">Resultado Real: **${match.resultado_real}**</p>
+                            <p class="final-scorer">Goleador: ${match.goleador_real} (${match.minuto_gol_real}')</p>
+                            <p class="points-earned">Puntos Obtenidos: <span>${result.points}</span>/${result.totalPossiblePoints}</p>
+                            <p class="user-pred">Tu Predicción: ${prediction ? `${prediction.localScore}-${prediction.visitorScore} (${prediction.scorer})` : 'No apostaste'}</p>
+                        </div>
+                    `;
+                } else if (prediction) {
+                     predictionHtml = `
+                        <div class="prediction-result saved">
+                            <p>¡Predicción Guardada! **${prediction.localScore}-${prediction.visitorScore}**</p>
+                            <p class="user-pred">Goleador: ${prediction.scorer} | Min. ${prediction.goalMinute}</p>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div class="card match-card ${match.estado.toLowerCase()}">
+                        <span class="match-status">${match.estado}</span>
+                        <h3>${match.equipo_local} vs ${match.equipo_visitante}</h3>
+                        <p class="match-date"><i class="fas fa-calendar-alt"></i> ${match.fecha} | ${match.hora}</p>
+                        
+                        <div class="prediction-form">
+                            <h4>Tu Pronóstico:</h4>
+                            <div class="input-row">
+                                <div class="input-group">
+                                    <label for="localScore-${match.id}">Goles Local</label>
+                                    <input type="number" id="localScore-${match.id}" min="0" value="${prediction ? prediction.localScore : ''}" ${isDisabled ? 'disabled' : ''} required>
+                                </div>
+                                <div class="input-group">
+                                    <label for="visitorScore-${match.id}">Goles Visitante</label>
+                                    <input type="number" id="visitorScore-${match.id}" min="0" value="${prediction ? prediction.visitorScore : ''}" ${isDisabled ? 'disabled' : ''} required>
+                                </div>
+                            </div>
+
+                            <div class="input-group">
+                                <label for="scorer-${match.id}">Goleador (Primer Gol)</label>
+                                <input type="text" id="scorer-${match.id}" placeholder="Ej: Lewandowski" value="${prediction ? prediction.scorer : ''}" ${isDisabled ? 'disabled' : ''} required>
+                            </div>
+                            
+                            <div class="input-row">
+                                <div class="input-group">
+                                    <label for="goalTime-${match.id}">Tiempo del Gol</label>
+                                    <select id="goalTime-${match.id}" ${isDisabled ? 'disabled' : ''} required>
+                                        <option value="">Seleccionar</option>
+                                        <option value="1er" ${prediction && prediction.goalTime === '1er' ? 'selected' : ''}>1er T.</option>
+                                        <option value="2do" ${prediction && prediction.goalTime === '2do' ? 'selected' : ''}>2do T.</option>
+                                    </select>
+                                </div>
+                                <div class="input-group">
+                                    <label for="goalMinute-${match.id}">Minuto (1-90)</label>
+                                    <input type="number" id="goalMinute-${match.id}" min="1" max="90" value="${prediction ? prediction.goalMinute : ''}" ${isDisabled ? 'disabled' : ''} required>
+                                </div>
+                            </div>
+                            
+                            ${!isDisabled ? 
+                                `<button class="btn btn-primary btn-full-width" onclick="savePrediction(${match.id})"><i class="fas fa-save"></i> Guardar Predicción</button>` : 
+                                (isActivo ? `<p class="alert-message active-alert">¡Partido Activo! No se aceptan más apuestas.</p>` : '')}
+                        </div>
+                        ${predictionHtml}
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+}
+
+// VISTA RANKING (Global)
+async function renderRanking(content) {
+    const user = getCurrentUser();
+    if (!user) return navigate(APP_ROUTES.LOGIN);
+    
+    clearInterval(currentInterval);
+    
+    const allPlayers = await fetchData('dummy-players.json');
+    const matches = await fetchData('matches.json');
+
+    content.innerHTML = `
+        <h2><i class="fas fa-chart-line"></i> Ranking Global</h2>
+        <p>Clasificación de todos los participantes que han pagado la cuota de entrada.</p>
+        <div id="full-ranking-container">
+            <p style="text-align: center;">Calculando ranking...</p>
+        </div>
+    `;
+    
+    startRankingSimulation(allPlayers, matches);
+}
+
+
+// VISTA SALA DE APUESTAS (ROOM)
+async function renderRoom(content) {
+    clearInterval(currentInterval);
+    
+    const matches = await fetchData('matches.json');
+    const allPlayers = await fetchData('dummy-players.json');
+
+    const paidParticipants = allPlayers.filter(p => p.isPaidPrediction);
+    const totalParticipants = paidParticipants.length;
+    const prizePool = totalParticipants * ENTRY_FEE;
+
+    const totalMatches = matches.length;
+    const matchesFinished = matches.filter(m => m.estado === 'Finalizado').length;
+    const matchesPending = matches.filter(m => m.estado === 'Pendiente').length;
+    const matchesActive = matches.filter(m => m.estado === 'Activo').length;
+
+    content.innerHTML = `
+        <h2><i class="fas fa-users"></i> Sala de Apuestas</h2>
+        <p>Detalles del torneo actual: **Football Pool MAX**.</p>
+
+        <div class="user-stats">
+            <div class="card stat-card room-stat"><i class="fas fa-users"></i> Participantes: <span>${totalParticipants} / ${ROOM_LIMIT}</span></div>
+            <div class="card stat-card room-stat primary-stat"><i class="fas fa-coins"></i> Premio Acumulado: <span>$${prizePool.toFixed(2)} USD</span></div>
+            <div class="card stat-card room-stat"><i class="fas fa-flag-checkered"></i> Partidos Finalizados: <span>${matchesFinished} / ${totalMatches}</span></div>
+        </div>
+
+        <div class="dashboard-grid">
+            <div class="card">
+                <h3>Resumen de Partidos</h3>
+                <ul class="match-summary-list">
+                    <li><i class="fas fa-check-circle finished"></i> Finalizados: ${matchesFinished}</li>
+                    <li><i class="fas fa-exclamation-triangle active"></i> Activos: ${matchesActive}</li>
+                    <li><i class="fas fa-clock pending"></i> Pendientes: ${matchesPending}</li>
+                </ul>
+            </div>
+            <div class="card">
+                <h3>Cuota y Reglas</h3>
+                <p><strong>Cuota de Entrada:</strong> $${ENTRY_FEE.toFixed(2)} USD</p>
+                <p><strong>Bote:</strong> 100% de la recaudación.</p>
+                <p><strong>Sistema de Puntos:</strong></p>
+                <ul>
+                    <li>Ganador: ${POINTS_SYSTEM.WINNER} pts</li>
+                    <li>Marcador Exacto: ${POINTS_SYSTEM.EXACT_SCORE} pts</li>
+                    <li>Primer Goleador: ${POINTS_SYSTEM.GOALSCORER} pts</li>
+                </ul>
+            </div>
+        </div>
+        
+        <h3 style="margin-top: 30px;"><i class="fas fa-list-ol"></i> Lista de Participantes Pagados</h3>
+        <table class="table-ranking">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Nombre</th>
+                    <th>Estatus</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${paidParticipants.map(p => `
+                    <tr>
+                        <td data-label="ID">${p.id}</td>
+                        <td data-label="Nombre">${p.name}</td>
+                        <td data-label="Estatus"><span class="badge paid"><i class="fas fa-check"></i> Pagado</span></td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+// VISTA ADMIN
+async function renderAdmin(content) {
+    const user = getCurrentUser();
+    if (!user || !user.id.startsWith('admin')) {
+        content.innerHTML = `<div class="card error-message"><h2>Acceso Denegado</h2><p>Solo el administrador puede acceder a esta sección.</p><a href="#dashboard" class="btn btn-primary">Volver al Dashboard</a></div>`;
         return;
     }
 
-    window.location.hash = route;
-    updateHeader(user);
+    const matches = await fetchData('matches.json');
+    const allPlayers = await fetchData('dummy-players.json');
+    
+    const players = [...allPlayers];
+    if (!players.find(p => p.id === 'admin-001')) {
+        players.unshift({id: "admin-001", name: "Administrador", balance: 5000.00, puntos: 0, porcentaje: 0, isPaidPrediction: true});
+    }
 
+
+    content.innerHTML = `
+        <h2><i class="fas fa-user-shield"></i> Panel de Administración</h2>
+        <div class="admin-tools">
+            <div class="card admin-section">
+                <h3>Gestión de Partidos y Resultados</h3>
+                <p>Ingresa los resultados reales para calcular los puntos de los jugadores.</p>
+                <div class="match-admin-list">
+                    ${matches.map(m => `
+                        <div class="match-admin-item card ${m.estado.toLowerCase()}">
+                            <h4>Partido ${m.id}: ${m.equipo_local} vs ${m.equipo_visitante}</h4>
+                            <span class="match-status">${m.estado}</span>
+                            ${m.estado === 'Finalizado' ? `
+                                <p>Resultado: **${m.resultado_real}** | Goleador: **${m.goleador_real}**</p>
+                            ` : `
+                                <div class="admin-form">
+                                    <input type="number" id="adminLocalScore-${m.id}" placeholder="Goles Local" min="0" required>
+                                    <input type="number" id="adminVisitorScore-${m.id}" placeholder="Goles Visitante" min="0" required>
+                                    <input type="text" id="adminScorer-${m.id}" placeholder="Goleador Real" required>
+                                    <select id="adminGoalTime-${m.id}" required>
+                                        <option value="">Tiempo del Gol</option>
+                                        <option value="1er">1er T.</option>
+                                        <option value="2do">2do T.</option>
+                                    </select>
+                                    <input type="number" id="adminGoalMinute-${m.id}" placeholder="Minuto (1-90)" min="1" max="90" required>
+                                    <button class="btn btn-primary btn-full-width" onclick="finalizeMatch(${m.id})"><i class="fas fa-flag-checkered"></i> FINALIZAR JUEGO</button>
+                                </div>
+                            `}
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div class="card admin-section">
+                <h3>Gestión de Saldos y Usuarios (Demo)</h3>
+                <p>Simulación de carga de saldo a jugadores.</p>
+                <form id="admin-balance-form">
+                    <div class="input-group">
+                        <label for="admin-player-select">Seleccionar Jugador:</label>
+                        <select id="admin-player-select" required>
+                            ${players.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="admin-amount">Monto a Añadir (USD):</label>
+                        <input type="number" id="admin-amount" placeholder="Ej: 50.00" min="1" required>
+                    </div>
+                    <button type="submit" class="btn btn-secondary btn-full-width"><i class="fas fa-plus-circle"></i> Añadir Saldo</button>
+                </form>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('admin-balance-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const selectedId = document.getElementById('admin-player-select').value;
+        const amount = parseFloat(document.getElementById('admin-amount').value);
+        
+        alert(`Simulación: Se añadieron $${amount.toFixed(2)} USD al jugador ${players.find(p => p.id === selectedId).name}. (En producción, esto actualizaría la DB).`);
+        document.getElementById('admin-balance-form').reset();
+    });
+}
+
+
+// --- 5. LÓGICA DE EVENTOS Y NAVEGACIÓN ---
+
+function navigate(route) {
+    if (currentInterval) clearInterval(currentInterval); // Limpia intervalos al navegar
+    window.location.hash = route;
+}
+
+function renderView(route) {
+    const content = document.getElementById('app-content');
+    const header = document.getElementById('app-header');
+    
+    if (!content) return; 
+
+    content.innerHTML = '<p style="text-align: center; margin-top: 50px;">Cargando...</p>'; 
+
+    const user = getCurrentUser();
+    header.innerHTML = renderHeader(user);
+    
     switch (route) {
         case APP_ROUTES.HOME:
             renderHome(content);
@@ -247,370 +714,70 @@ function navigate(route, data = {}) {
         case APP_ROUTES.DASHBOARD:
             renderDashboard(content);
             break;
-        case APP_ROUTES.PREDICTIONS:
-            renderPredictions(content);
-            break;
         case APP_ROUTES.ROOM:
             renderRoom(content);
+            break;
+        case APP_ROUTES.PREDICTIONS:
+            renderPredictions(content);
             break;
         case APP_ROUTES.RANKING:
             renderRanking(content);
             break;
-        case APP_ROUTES.ADMIN: // <--- CASO PARA LA INTERFAZ DE ADMINISTRACIÓN
-            // Solo permitir el acceso al admin si estás logueado para fines de demo
-            if (user) { 
-                renderAdminPanel(content);
-            } else {
-                 alert("Acceso denegado. Por favor, inicie sesión primero (solo para demo).");
-                 navigate(APP_ROUTES.LOGIN);
-            }
+        case APP_ROUTES.ADMIN:
+            renderAdmin(content);
             break;
         default:
-            renderHome(content);
+            navigate(user ? APP_ROUTES.DASHBOARD : APP_ROUTES.HOME);
+            break;
     }
 }
 
-function logout() {
-    localStorage.removeItem('currentUser');
-    localStorage.removeItem('predictions');
-    navigate(APP_ROUTES.HOME);
-}
-
-
-// --- 5. RENDERIZADO DE INTERFACES DEL JUGADOR ---
-
-/**
- * Renderiza la vista de inicio (Landing Page).
- */
-function renderHome(content) {
-    content.innerHTML = `
-        <div class="centered-message">
-            <h2>Bienvenido a **Football Pool MAX**</h2>
-            <p>Tu plataforma definitiva para predecir marcadores y ganar grandes premios.</p>
-            <div class="action-buttons">
-                <button class="btn-primary" onclick="navigate('${APP_ROUTES.LOGIN}')"><i class="fas fa-sign-in-alt"></i> Iniciar Sesión</button>
-            </div>
-            <div class="info-section">
-                <h3><i class="fas fa-info-circle"></i> Cómo Jugar</h3>
-                <p>Predice el marcador exacto, el ganador, el goleador y el minuto del primer gol para cada partido.</p>
-                <h3><i class="fas fa-trophy"></i> Sistema de Puntos</h3>
-                <ul>
-                    <li>Marcador Exacto: ${POINTS_SYSTEM.EXACT_SCORE} pts</li>
-                    <li>Ganador/Empate: ${POINTS_SYSTEM.WINNER} pts</li>
-                    <li>Goleador (Simulado): ${POINTS_SYSTEM.GOALSCORER} pts</li>
-                    <li>Tiempo del Gol: ${POINTS_SYSTEM.GOAL_TIME} pts</li>
-                    <li>Minuto Aproximado: ${POINTS_SYSTEM.GOAL_MINUTE} pts</li>
-                </ul>
-            </div>
-        </div>
-    `;
-}
-
-/**
- * Renderiza la vista de Login (simulado).
- */
-async function renderLogin(content) {
-    const players = await fetchData('dummy-players.json');
-    const playerOptions = players.map(p => 
-        `<option value="${p.id}">${p.name}</option>`
-    ).join('');
-
-    content.innerHTML = `
-        <div class="centered-message login-card">
-            <h2>Iniciar Sesión (Demo)</h2>
-            <p>Selecciona tu perfil de jugador para iniciar.</p>
-            <div class="form-group">
-                <label for="player-select">Seleccionar Jugador:</label>
-                <select id="player-select" class="form-control">
-                    <option value="">-- Seleccionar --</option>
-                    ${playerOptions}
-                </select>
-            </div>
-            <button class="btn-primary" onclick="login()"><i class="fas fa-arrow-right"></i> Entrar</button>
-            <p style="margin-top: 20px;"><a href="#" onclick="navigate('${APP_ROUTES.HOME}')">Volver a Inicio</a></p>
-        </div>
-    `;
-}
-
-function login() {
-    const select = document.getElementById('player-select');
-    const selectedId = select.value;
-    if (selectedId) {
-        fetchData('dummy-players.json').then(players => {
-            const user = players.find(p => p.id === selectedId);
-            if (user) {
-                setCurrentUser(user);
-                navigate(APP_ROUTES.DASHBOARD);
-            }
-        });
-    } else {
-        alert("Por favor, selecciona un jugador.");
-    }
-}
-
-/**
- * Renderiza la vista principal del jugador (Dashboard).
- */
-async function renderDashboard(content) {
-    const user = getCurrentUser();
-    if (!user) return navigate(APP_ROUTES.HOME);
-
-    const matches = await fetchData('matches.json');
-    const predictions = getPredictions();
-    const rankedPlayers = await recalculateRanking(await fetchData('dummy-players.json'), predictions, matches);
-    
-    // Simular partido activo (el primero en estado 'Activo')
-    const activeMatch = matches.find(m => m.estado === 'Activo');
-
-    let matchCardHTML = '<div class="card"><p class="text-center">No hay partidos activos en este momento.</p></div>';
-
-    if (activeMatch) {
-        const predKey = `${user.id}-${activeMatch.id}`;
-        const userPrediction = predictions[predKey];
-        // Usar liveScore si existe, si no, usar el resultado_real si el estado es Activo (para la demo)
-        const localScore = activeMatch.isLive && activeMatch.liveScore ? activeMatch.liveScore.split('-')[0] : (activeMatch.resultado_real ? activeMatch.resultado_real.split('-')[0] : 0);
-        const visitorScore = activeMatch.isLive && activeMatch.liveScore ? activeMatch.liveScore.split('-')[1] : (activeMatch.resultado_real ? activeMatch.resultado_real.split('-')[1] : 0);
-
-        matchCardHTML = `
-            <div class="card match-live-card">
-                <h3><i class="fas fa-satellite-dish"></i> Partido en Vivo (Simulación)</h3>
-                <p class="match-time">${activeMatch.hora} - ${activeMatch.fecha}</p>
-                <div class="match-teams">
-                    <span class="team-name">${activeMatch.equipo_local}</span>
-                    <span class="score" id="live-local-score">${localScore}</span>
-                    <span>vs</span>
-                    <span class="score" id="live-visitor-score">${visitorScore}</span>
-                    <span class="team-name">${activeMatch.equipo_visitante}</span>
-                </div>
-                ${userPrediction ? `
-                    <p class="prediction-info">Tu Predicción: **${userPrediction.localScore}-${userPrediction.visitorScore}**</p>
-                ` : `
-                    <p class="prediction-info">Aún no has hecho tu predicción.</p>
-                `}
-                <button class="btn-secondary" onclick="navigate('${APP_ROUTES.PREDICTIONS}')">Ver Todos</button>
-            </div>
-        `;
-        // Iniciar simulación de partido si no está activa
-        if (!currentInterval) {
-            startLiveSimulation(activeMatch.id);
-        }
-    }
-
-
-    content.innerHTML = `
-        <div class="dashboard-grid">
-            <div class="stats-column">
-                <h2>Hola, ${user.name} 👋</h2>
-                
-                <div class="card stat-card total-points">
-                    <i class="fas fa-star"></i>
-                    <h4>Puntos Totales</h4>
-                    <p class="stat-value">${user.puntos}</p>
-                </div>
-                
-                <div class="card stat-card hit-rate">
-                    <i class="fas fa-chart-line"></i>
-                    <h4>Tasa de Acierto</h4>
-                    <p class="stat-value">${user.porcentaje}%</p>
-                </div>
-
-                <div class="card stat-card ranking-position">
-                    <i class="fas fa-medal"></i>
-                    <h4>Tu Posición</h4>
-                    <p class="stat-value">#${rankedPlayers.findIndex(p => p.id === user.id) + 1}</p>
-                </div>
-
-                <div class="card stat-card wallet">
-                    <i class="fas fa-wallet"></i>
-                    <h4>Saldo Disponible</h4>
-                    <p class="stat-value">$${user.balance.toFixed(2)} USD</p>
-                </div>
-            </div>
-
-            <div class="matches-column">
-                ${matchCardHTML}
-                
-                <div class="card next-matches">
-                    <h3><i class="fas fa-calendar-alt"></i> Próximos Partidos</h3>
-                    ${matches.filter(m => m.estado === 'Pendiente').slice(0, 3).map(m => `
-                        <div class="match-item">
-                            <span>${m.equipo_local} vs ${m.equipo_visitante}</span>
-                            <span>${m.fecha} / ${m.hora}</span>
-                        </div>
-                    `).join('')}
-                    <button class="btn-primary" onclick="navigate('${APP_ROUTES.PREDICTIONS}')">Hacer Predicciones</button>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-/**
- * Simulación en tiempo real del marcador
- */
-function startLiveSimulation(matchId) {
-    const content = document.getElementById('app-content');
-    if (!content.querySelector('.match-live-card')) {
-        clearInterval(currentInterval);
-        return;
-    }
-
-    let local = 0;
-    let visitor = 0;
-    let minute = 0;
-
-    // Buscar el partido en globalMatches
-    const matchIndex = globalMatches.findIndex(m => m.id === matchId);
-    if (matchIndex === -1) return;
-    
-    // Inicializar con el resultado real si ya existe (para reanudar la simulación)
-    if (globalMatches[matchIndex].resultado_real) {
-        [local, visitor] = globalMatches[matchIndex].resultado_real.split('-').map(Number);
-    }
-    
-    globalMatches[matchIndex].isLive = true;
-    globalMatches[matchIndex].liveScore = `${local}-${visitor}`;
-
-
-    currentInterval = setInterval(() => {
-        minute++;
-
-        if (minute > 90) {
-            clearInterval(currentInterval);
-            console.log(`Simulación de Partido ${matchId} terminada. El administrador debe finalizarlo.`);
-            return;
-        }
-
-        // Simular un gol cada 15 minutos con 10% de probabilidad
-        if (minute % 15 === 0 && Math.random() < 0.1) {
-            if (Math.random() > 0.5) {
-                local++;
-            } else {
-                visitor++;
-            }
-        }
-        
-        // Actualizar datos de la simulación
-        globalMatches[matchIndex].liveScore = `${local}-${visitor}`;
-        
-        // Actualizar la interfaz si el usuario sigue en el dashboard
-        const localScoreElement = document.getElementById('live-local-score');
-        const visitorScoreElement = document.getElementById('live-visitor-score');
-        const minuteElement = content.querySelector('.match-time');
-        
-        if (localScoreElement && visitorScoreElement) {
-            localScoreElement.textContent = local;
-            visitorScoreElement.textContent = visitor;
-            if (minuteElement) {
-                minuteElement.textContent = `Minuto ${minute} / En Curso`;
-            }
-        }
-
-    }, 1000); // Actualiza cada segundo (simulando 1 minuto de juego)
-}
-
-/**
- * Renderiza la vista de predicciones.
- */
-async function renderPredictions(content) {
-    const user = getCurrentUser();
-    if (!user) return navigate(APP_ROUTES.HOME);
-
-    const matches = await fetchData('matches.json');
-    const predictions = getPredictions();
-    const teamPlayers = await fetchData('team-players.json');
-
-    const matchItems = matches.map(match => {
-        const predKey = `${user.id}-${match.id}`;
-        const prediction = predictions[predKey] || {};
-        const isFinished = match.estado === 'Finalizado';
-        const isPending = match.estado === 'Pendiente';
-        const isDisabled = isFinished || !isPending ? 'disabled' : '';
-        
-        // Determinar jugadores disponibles (simulando lista combinada)
-        const players = [...(teamPlayers[match.equipo_local] || []), ...(teamPlayers[match.equipo_visitante] || [])];
-        const scorerOptions = players.map(p => 
-            `<option value="${p}" ${prediction.scorer === p ? 'selected' : ''}>${p}</option>`
-        ).join('');
-        
-        const finalResult = isFinished ? `
-            <div class="real-result">
-                <h4>Resultado Real: ${match.resultado_real}</h4>
-                <p>Goleador: ${match.goleador_real} (${match.tiempo_gol_real} T, Min ${match.minuto_gol_real})</p>
-                <p>Puntos Obtenidos: <b>${calculatePoints(prediction, match)} pts</b></p>
-            </div>
-        ` : '';
-
+// Función que genera el header de navegación
+function renderHeader(user) {
+    if (!user) {
         return `
-            <div class="card prediction-match-card ${isFinished ? 'finished' : (isPending ? 'pending' : 'active')}" id="match-card-${match.id}">
-                <h3>${match.equipo_local} vs ${match.equipo_visitante}</h3>
-                <p class="match-details">${match.fecha} / ${match.hora} - Estado: <b>${match.estado}</b></p>
-                
-                ${finalResult}
-
-                <div class="prediction-form" ${isFinished ? 'style="display: none;"' : ''}>
-                    
-                    <div class="score-inputs">
-                        <label>${match.equipo_local} Goles:</label>
-                        <input type="number" id="localScore-${match.id}" value="${prediction.localScore || 0}" min="0" ${isDisabled}>
-                        
-                        <label>${match.equipo_visitante} Goles:</label>
-                        <input type="number" id="visitorScore-${match.id}" value="${prediction.visitorScore || 0}" min="0" ${isDisabled}>
-                    </div>
-
-                    <div class="prediction-detail-inputs">
-                        <label for="scorerSelect-${match.id}">Primer Goleador (Simulado):</label>
-                        <select id="scorerSelect-${match.id}" ${isDisabled}>
-                            <option value="">-- Seleccionar --</option>
-                            ${scorerOptions}
-                        </select>
-
-                        <label for="goalTime-${match.id}">Tiempo del Gol:</label>
-                        <select id="goalTime-${match.id}" ${isDisabled} required>
-                            <option value="" ${!prediction.goalTime ? 'selected' : ''}>-- Tiempo --</option>
-                            <option value="1er" ${prediction.goalTime === '1er' ? 'selected' : ''}>1er Tiempo</option>
-                            <option value="2do" ${prediction.goalTime === '2do' ? 'selected' : ''}>2do Tiempo</option>
-                        </select>
-                        
-                        <label for="goalMinute-${match.id}">Minuto (1-90):</label>
-                        <input type="number" id="goalMinute-${match.id}" value="${prediction.goalMinute || ''}" min="1" max="90" placeholder="Min." ${isDisabled} required>
-                    </div>
-
-                    <button class="btn-primary" onclick="savePrediction(${match.id})" ${isDisabled}>GUARDAR PREDICCIÓN</button>
-                    ${prediction.localScore !== undefined ? `<p class="prediction-saved">✅ Predicción Guardada: **${prediction.localScore}-${prediction.visitorScore}**</p>` : ''}
-                </div>
-            </div>
+            <div class="logo">FOOTBALL POOL MAX</div>
+            <nav>
+                <a href="#home"><i class="fas fa-home"></i> Inicio</a>
+                <a href="#room"><i class="fas fa-users"></i> Sala</a>
+                <a href="#login" class="btn btn-primary btn-small">Iniciar Sesión</a>
+            </nav>
         `;
-    }).join('');
+    }
 
-    content.innerHTML = `
-        <h2><i class="fas fa-edit"></i> Haz tus Predicciones</h2>
-        <p>Completa el marcador y los detalles del primer gol para cada partido pendiente.</p>
-        <div class="predictions-grid">
-            ${matchItems}
+    const isAdmin = user.id.startsWith('admin');
+    const userRole = isAdmin ? 'Admin' : 'Jugador';
+
+    return `
+        <div class="logo">FP-MAX</div>
+        <div class="user-info">
+            <i class="fas fa-user-circle"></i> 
+            <span>${user.name} (${userRole})</span>
+            <span class="user-balance">$${user.balance ? user.balance.toFixed(2) : '0.00'}</span>
         </div>
+        <nav>
+            <a href="#dashboard"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+            <a href="#predictions"><i class="fas fa-edit"></i> Predicciones</a>
+            <a href="#ranking"><i class="fas fa-chart-line"></i> Ranking</a>
+            ${isAdmin ? `<a href="#admin" class="admin-link"><i class="fas fa-user-shield"></i> Admin</a>` : ''}
+            <a href="#" onclick="logout()" class="btn btn-secondary btn-small">Cerrar Sesión</a>
+        </nav>
     `;
 }
 
+// Función para guardar una predicción
 function savePrediction(matchId) {
     const user = getCurrentUser();
-    if (!user) return navigate(APP_ROUTES.HOME);
+    if (!user) return navigate(APP_ROUTES.LOGIN);
 
     const localScoreInput = document.getElementById(`localScore-${matchId}`);
     const visitorScoreInput = document.getElementById(`visitorScore-${matchId}`);
-    const scorerInput = document.getElementById(`scorerSelect-${matchId}`);
+    const scorerInput = document.getElementById(`scorer-${matchId}`);
     const goalTimeSelect = document.getElementById(`goalTime-${matchId}`);
     const goalMinuteInput = document.getElementById(`goalMinute-${matchId}`);
 
-    // Validación de campos requeridos
     if (localScoreInput.value === "" || visitorScoreInput.value === "" || goalTimeSelect.value === "" || goalMinuteInput.value === "") {
-        alert("Por favor, completa todos los campos requeridos (marcador, tiempo y minuto del gol) antes de guardar.");
-        return;
-    }
-    
-    const minutes = parseInt(goalMinuteInput.value);
-    if(minutes < 1 || minutes > 90) {
-        alert("El minuto del gol debe estar entre 1 y 90.");
+        alert("Por favor, completa todos los campos requeridos.");
         return;
     }
 
@@ -619,7 +786,7 @@ function savePrediction(matchId) {
         visitorScore: parseInt(visitorScoreInput.value),
         scorer: scorerInput.value.trim() || 'No Determinado',
         goalTime: goalTimeSelect.value,
-        goalMinute: minutes
+        goalMinute: parseInt(goalMinuteInput.value)
     };
 
     const predKey = `${user.id}-${matchId}`;
@@ -628,369 +795,45 @@ function savePrediction(matchId) {
     savePredictions(allPredictions);
 
     alert(`¡Predicción para el Partido ${matchId} guardada con éxito!`);
-    navigate(APP_ROUTES.PREDICTIONS); 
+    renderView(APP_ROUTES.PREDICTIONS); 
 }
 
-/**
- * Renderiza la vista de Sala/Room.
- */
-async function renderRoom(content) {
-    const players = await fetchData('dummy-players.json');
-    const participants = players.filter(p => p.isPaidPrediction);
+// Función para finalizar un partido desde la vista de Admin (Simulación)
+async function finalizeMatch(matchId) {
+    const localScore = document.getElementById(`adminLocalScore-${matchId}`).value;
+    const visitorScore = document.getElementById(`adminVisitorScore-${matchId}`).value;
+    const scorer = document.getElementById(`adminScorer-${matchId}`).value.trim();
+    const goalTime = document.getElementById(`adminGoalTime-${matchId}`).value;
+    const goalMinute = parseInt(document.getElementById(`adminGoalMinute-${matchId}`).value);
 
-    content.innerHTML = `
-        <div class="room-container">
-            <h2><i class="fas fa-users"></i> Sala de Apuestas (Room)</h2>
-            <div class="room-stats">
-                <div class="card stat-card">
-                    <h4>Participantes</h4>
-                    <p class="stat-value">${participants.length} / ${ROOM_LIMIT}</p>
-                </div>
-                <div class="card stat-card">
-                    <h4>Premio Acumulado (Simulado)</h4>
-                    <p class="stat-value">$${(participants.length * ENTRY_FEE).toFixed(2)} USD</p>
-                </div>
-            </div>
-
-            <div class="card player-list-card">
-                <h3>Lista de Participantes Pagados</h3>
-                <ul class="player-list">
-                    ${participants.map(p => `<li><i class="fas fa-check-circle paid"></i> ${p.name}</li>`).join('')}
-                </ul>
-            </div>
-        </div>
-    `;
-}
-
-/**
- * Renderiza la vista del Ranking.
- */
-async function renderRanking(content) {
-    const matches = await fetchData('matches.json');
-    const predictions = getPredictions();
-    const rankedPlayers = await recalculateRanking(await fetchData('dummy-players.json'), predictions, matches);
-    const user = getCurrentUser();
-    
-    const rankingRows = rankedPlayers.map((player, index) => {
-        const isCurrentUser = user && player.id === user.id ? 'is-current-user' : '';
-        const badge = index === 0 ? '<i class="fas fa-crown gold"></i>' : (index === 1 ? '<i class="fas fa-medal silver"></i>' : (index === 2 ? '<i class="fas fa-medal bronze"></i>' : ''));
-
-        return `
-            <tr class="${isCurrentUser}">
-                <td data-label="Posición">${index + 1}. ${badge}</td>
-                <td data-label="Jugador">${player.name}</td>
-                <td data-label="Puntos" class="points-col">${player.puntos}</td>
-                <td data-label="Acierto">${player.porcentaje}%</td>
-            </tr>
-        `;
-    }).join('');
-
-    content.innerHTML = `
-        <h2><i class="fas fa-trophy"></i> Ranking Global</h2>
-        <p>Clasificación de jugadores por puntos acumulados en los partidos finalizados.</p>
-        
-        <div class="card">
-            <table class="table-ranking">
-                <thead>
-                    <tr>
-                        <th>Posición</th>
-                        <th>Jugador</th>
-                        <th>Puntos</th>
-                        <th>Acierto (%)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${rankingRows}
-                </tbody>
-            </table>
-        </div>
-    `;
-}
-
-
-// =================================================================
-// --- 5.5. FUNCIONES Y VISTA DEL PANEL ADMINISTRATIVO (ADMIN) ---
-// =================================================================
-
-/**
- * Función que simula la actualización de datos persistentes (como localStorage)
- * para los partidos. En un entorno real, esto sería una llamada API de servidor.
- * @param {Array} newMatches - El array de partidos actualizado.
- */
-function simulateMatchDataUpdate(newMatches) {
-    // Simulación: Actualizar la variable global
-    globalMatches = newMatches;
-    
-    // Simulación: Guardar en localStorage para persistencia básica
-    localStorage.setItem('simulatedMatches', JSON.stringify(newMatches));
-    
-    console.log("Datos de Partidos SIMULADAMENTE actualizados.");
-}
-
-/**
- * Función que simula la actualización de datos persistentes para un usuario.
- * @param {string} userId - ID del usuario a actualizar.
- * @param {Object} updateData - Objeto con { balance, isPaidPrediction }.
- */
-async function simulateUserDataUpdate(userId, updateData) {
-    let allPlayers = await fetchData('dummy-players.json');
-    const playerIndex = allPlayers.findIndex(p => p.id === userId);
-
-    if (playerIndex > -1) {
-        // Clonar para no modificar la fuente original si es necesario
-        let playerToUpdate = {...allPlayers[playerIndex]};
-        
-        // Aplicar la actualización
-        allPlayers[playerIndex] = {
-            ...playerToUpdate,
-            ...updateData
-        };
-        
-        // Simular la actualización de la lista completa
-        localStorage.setItem('simulatedPlayers', JSON.stringify(allPlayers));
-        
-        // Si es el usuario actualmente logueado, actualizar su sesión
-        const currentUser = getCurrentUser();
-        if (currentUser && currentUser.id === userId) {
-            // Asegurar que solo se actualicen los campos pasados, manteniendo puntos/porcentaje
-            setCurrentUser({...currentUser, ...updateData});
-        }
-
-        return true;
-    }
-    return false;
-}
-
-/**
- * Simula la finalización de un partido y el registro del resultado real.
- */
-async function finalizeMatchFromAdmin(matchId) {
-    const localScore = parseInt(document.getElementById(`admin-local-score-${matchId}`).value);
-    const visitorScore = parseInt(document.getElementById(`admin-visitor-score-${matchId}`).value);
-    const scorer = document.getElementById(`admin-scorer-${matchId}`).value.trim();
-    const time = document.getElementById(`admin-time-${matchId}`).value;
-    const minute = parseInt(document.getElementById(`admin-minute-${matchId}`).value);
-
-    if (isNaN(localScore) || isNaN(visitorScore) || !scorer || !time || isNaN(minute)) {
-        alert("🚨 Por favor, complete todos los campos de resultado real para finalizar el partido.");
+    if (!localScore || !visitorScore || !scorer || !goalTime || !goalMinute) {
+        alert("Por favor, completa todos los resultados reales del partido.");
         return;
     }
     
-    const minutes = parseInt(minute);
-    if(minutes < 1 || minutes > 90) {
-        alert("El minuto del gol real debe estar entre 1 y 90.");
-        return;
-    }
+    // NOTA: En un entorno real, la lógica aquí debería actualizar los archivos JSON del servidor.
+    alert(`Partido ${matchId} finalizado. Resultado: ${localScore}-${visitorScore}. (Solo simulación: recarga la página de admin para ver los cambios).`);
     
-    // Obtener los datos actuales (simulados)
-    let matches = JSON.parse(JSON.stringify(globalMatches));
-    const matchIndex = matches.findIndex(m => m.id === matchId);
-
-    if (matchIndex === -1) {
-        alert('Partido no encontrado.');
-        return;
-    }
-    
-    const team1Name = matches[matchIndex].equipo_local;
-    const team2Name = matches[matchIndex].equipo_visitante;
-
-    // 1. Actualizar el objeto del partido
-    matches[matchIndex].estado = "Finalizado";
-    matches[matchIndex].resultado_real = `${localScore}-${visitorScore}`;
-    matches[matchIndex].ganador_real = determineWinner(localScore, visitorScore, team1Name, team2Name);
-    matches[matchIndex].goleador_real = scorer;
-    matches[matchIndex].tiempo_gol_real = time;
-    matches[matchIndex].minuto_gol_real = minutes;
-    matches[matchIndex].isLive = false; // Asegurar que no esté en vivo
-
-    // 2. SIMULAR persistencia de datos 
-    simulateMatchDataUpdate(matches); 
-    
-    // 3. Forzar Recalculo de Puntos y Ranking
-    const allPlayers = await fetchData('dummy-players.json');
-    await recalculateRanking(allPlayers, getPredictions(), matches);
-
-    alert(`✅ Partido ${matchId}: ${team1Name} vs ${team2Name} finalizado y ranking recalculado.`);
-    navigate(APP_ROUTES.ADMIN); // Recargar panel
-}
-
-/**
- * Simula el agregado de saldo a un usuario seleccionado.
- */
-async function addBalanceToSelectedUser() {
-    const select = document.getElementById('admin-user-select');
-    const amountInput = document.getElementById('admin-balance-amount');
-    const userId = select.value;
-    const amount = parseInt(amountInput.value);
-    
-    if (!userId || isNaN(amount) || amount <= 0) {
-        alert("🚨 Ingrese un monto válido y seleccione un usuario.");
-        return;
-    }
-
-    let allPlayers = await fetchData('dummy-players.json');
-    const player = allPlayers.find(p => p.id === userId);
-
-    if (player) {
-        const newBalance = (player.balance || 0) + amount;
-        
-        await simulateUserDataUpdate(userId, { balance: newBalance });
-        
-        alert(`✅ Se han agregado $${amount}.00 USD a ${player.name}. Nuevo saldo: $${newBalance.toFixed(2)} USD.`);
-        navigate(APP_ROUTES.ADMIN); 
-    }
-}
-
-
-/**
- * Renderiza la interfaz de gestión de partidos.
- */
-function renderMatchManagement(matches) {
-    const matchItems = matches.map(match => {
-        const isFinished = match.estado === 'Finalizado';
-        const winnerText = isFinished ? `Resultado: **${match.resultado_real}** (Ganador: ${match.ganador_real})` : 'Pendiente/Activo';
-        
-        // Obtener valores reales si existen para precargar el formulario
-        const [realLocalScore, realVisitorScore] = match.resultado_real ? match.resultado_real.split('-').map(s => s.trim()) : ['', ''];
-
-        return `
-            <div class="card match-admin-item">
-                <h4>Partido ${match.id}: ${match.equipo_local} vs ${match.equipo_visitante}</h4>
-                <p class="match-details">${match.fecha} / ${match.hora} - Estado: <b>${match.estado}</b>. ${winnerText}</p>
-                
-                ${!isFinished ? `
-                    <div class="form-group admin-match-form">
-                        <label>Resultado Local (Goles):</label>
-                        <input type="number" id="admin-local-score-${match.id}" min="0" value="${realLocalScore}" placeholder="${match.equipo_local}" required>
-                        <span>-</span>
-                        <label>Resultado Visitante (Goles):</label>
-                        <input type="number" id="admin-visitor-score-${match.id}" min="0" value="${realVisitorScore}" placeholder="${match.equipo_visitante}" required>
-                        
-                        <label>Goleador (Primer Gol):</label>
-                        <input type="text" id="admin-scorer-${match.id}" value="${match.goleador_real || ''}" placeholder="Ej: Lewandoski" required>
-                        
-                        <label>Tiempo:</label>
-                        <select id="admin-time-${match.id}" required>
-                            <option value="" ${!match.tiempo_gol_real ? 'selected' : ''}>Sel.</option>
-                            <option value="1er" ${match.tiempo_gol_real === '1er' ? 'selected' : ''}>1er T.</option>
-                            <option value="2do" ${match.tiempo_gol_real === '2do' ? 'selected' : ''}>2do T.</option>
-                        </select>
-                        
-                        <label>Minuto:</label>
-                        <input type="number" id="admin-minute-${match.id}" min="1" max="90" value="${match.minuto_gol_real || ''}" placeholder="Min" required>
-                    </div>
-                    <button onclick="finalizeMatchFromAdmin(${match.id})" class="btn-primary" style="background-color: var(--color-accent);">FINALIZAR JUEGO</button>
-                ` : `<button class="btn-secondary" disabled>Juego Finalizado</button>`}
-            </div>
-        `;
-    }).join('');
-
-    return `
-        <div class="admin-section">
-            <h3>Gestión de Partidos <i class="fas fa-futbol"></i></h3>
-            <p>Define el resultado real para finalizar un juego y activar la puntuación.</p>
-            <div class="match-admin-grid">
-                ${matchItems}
-            </div>
-        </div>
-    `;
-}
-
-/**
- * Renderiza la interfaz de gestión de usuarios y saldos.
- */
-async function renderUserManagement() {
-    const allPlayers = await fetchData('dummy-players.json');
-    
-    const userOptions = allPlayers.map(p => 
-        `<option value="${p.id}">${p.name} (Saldo: $${p.balance.toFixed(2)})</option>`
-    ).join('');
-    
-    return `
-        <div class="admin-section">
-            <h3>Gestión de Usuarios y Saldos <i class="fas fa-money-check-alt"></i></h3>
-            <div class="card">
-                <h4>Agregar Saldo</h4>
-                <div class="form-group">
-                    <label for="admin-user-select">Seleccionar Usuario:</label>
-                    <select id="admin-user-select">
-                        <option value="">-- Seleccionar --</option>
-                        ${userOptions}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="admin-balance-amount">Monto a Agregar (USD):</label>
-                    <input type="number" id="admin-balance-amount" min="1" placeholder="Ej: 100" required>
-                </div>
-                <button onclick="addBalanceToSelectedUser()" class="btn-primary">AÑADIR SALDO</button>
-            </div>
-            
-            <div class="card" style="margin-top: 20px;">
-                <h4>Estadísticas Rápidas</h4>
-                <p>Total de Jugadores (Simulados): <b>${allPlayers.length}</b></p>
-                <p>Participantes Pagados: <b>${allPlayers.filter(p => p.isPaidPrediction).length}</b></p>
-            </div>
-        </div>
-    `;
-}
-
-
-/**
- * Función principal para renderizar el panel administrativo.
- */
-async function renderAdminPanel(content) {
-    const matches = await fetchData('matches.json');
-    
-    content.innerHTML = `
-        <h2><i class="fas fa-lock"></i> Panel Administrativo (ADMIN)</h2>
-        <p>Esta es la interfaz de gestión para simular la actualización de resultados y el manejo de usuarios.</p>
-        
-        <div class="admin-grid">
-            <div class="management-column">
-                ${await renderUserManagement()}
-            </div>
-            <div class="management-column">
-                ${renderMatchManagement(matches)}
-            </div>
-        </div>
-        
-        <div class="card" style="margin-top: 30px; text-align: center; border-left: 5px solid var(--color-accent);">
-            <p>⚠️ **NOTA IMPORTANTE:** Esta interfaz solo simula la gestión de datos mediante JavaScript local. Para una aplicación real, se requeriría un servidor y una base de datos.</p>
-            <button onclick="navigate('${APP_ROUTES.DASHBOARD}')" class="btn-secondary" style="margin-top: 15px;"><i class="fas fa-arrow-left"></i> Volver al Dashboard</button>
-        </div>
-    `;
+    // Recargar la vista de administración para forzar el recálculo
+    renderView(APP_ROUTES.ADMIN);
 }
 
 // --- 6. INICIALIZACIÓN ---
 
 function initApp() {
-    const user = getCurrentUser();
-    // Leer el hash de la URL para determinar la ruta
-    const initialRoute = window.location.hash.substring(1) || APP_ROUTES.HOME;
+    const route = window.location.hash.substring(1) || APP_ROUTES.HOME;
+    renderView(route);
 
-    // Si el usuario está logueado, ir al dashboard (o ruta del hash si es admin)
-    if (user) {
-        if (initialRoute === APP_ROUTES.ADMIN) {
-            navigate(APP_ROUTES.ADMIN);
-        } else {
-            navigate(APP_ROUTES.DASHBOARD);
-        }
-    } else {
-        // Si no está logueado, solo puede ir a HOME o LOGIN
-        if (initialRoute === APP_ROUTES.HOME || initialRoute === APP_ROUTES.LOGIN) {
-            navigate(initialRoute);
-        } else {
-            navigate(APP_ROUTES.HOME);
-        }
-    }
+    window.addEventListener('hashchange', () => {
+        const newRoute = window.location.hash.substring(1) || APP_ROUTES.HOME;
+        renderView(newRoute);
+    });
 }
 
 window.onload = initApp;
 
-// Habilitar las funciones globales para que los botones HTML funcionen
-window.navigate = navigate;
-window.login = login;
-window.logout = logout;
+// Habilitar las funciones globales
 window.savePrediction = savePrediction;
-window.finalizeMatchFromAdmin = finalizeMatchFromAdmin;
-window.addBalanceToSelectedUser = addBalanceToSelectedUser;
+window.finalizeMatch = finalizeMatch;
+window.logout = logout;
+window.navigate = navigate;
